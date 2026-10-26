@@ -1,0 +1,4 @@
+{% extends 'shoping_app/base.html' %}{% block title %}Your favourites — Moan{% endblock %}{% block content %}
+<main class="page-shell favorites-page"><span class="eyebrow">The ones you saved</span><h1 class="page-title">Your <em>favourites.</em></h1>
+  {% if products %}<div class="product-grid">{% for product in products %}{% include 'shoping_app/_product_card.html' %}{% endfor %}</div>{% else %}<div class="empty-state bag-empty"><span>♡</span><h3>Your saved pieces will live here.</h3><p>Tap the heart on anything you love to keep it close.</p><a class="button button-dark" href="{% url 'home' %}#collection">Explore the collection <span>↗</span></a></div>{% endif %}
+</main>{% endblock %}

@@ -1,0 +1,9 @@
+<article class="product-card">
+  <div class="product-image"><a class="product-image-link" href="{% url 'product_detail' product.slug %}" aria-label="View {{ product.name }} details">{% if product.photo %}<img src="{{ product.photo }}" alt="{{ product.name }}" loading="lazy">{% else %}<div class="image-placeholder">Moan<span>.</span></div>{% endif %}</a>
+    {% if product.is_featured %}<span class="product-tag">A little favourite</span>{% endif %}
+    <form class="favorite-form" method="post" action="{% url 'toggle_favorite' product.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="favorite-button {% if product.id|stringformat:'s' in favorites %}is-favorite{% endif %}" type="submit" aria-label="{% if product.id|stringformat:'s' in favorites %}Remove from{% else %}Add to{% endif %} favourites">{% if product.id|stringformat:'s' in favorites %}♥{% else %}♡{% endif %}</button></form>
+    {% if product.offer_percent %}<span class="offer-tag">{{ product.offer_percent }}% OFF</span>{% endif %}{% if product.stock_message %}<span class="stock-tag {% if product.stock == 0 %}sold-out-tag{% endif %}">{{ product.stock_message }}</span>{% endif %}
+  </div>
+  <div class="product-info"><div><h3><a href="{% url 'product_detail' product.slug %}">{{ product.name }}</a></h3><p>{{ product.category.name }}</p></div><div class="price">₹{{ product.price }}{% if product.offer_percent %}<del>₹{{ product.original_price }}</del>{% endif %}</div></div>
+  <div class="product-bottom"><div class="swatches"><i></i><i></i><i></i></div><form method="post" action="{% url 'add_to_cart' product.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="add-button" type="submit" {% if product.stock == 0 %}disabled{% endif %}>{% if product.stock == 0 %}Sold out{% else %}Add to bag <span>＋</span>{% endif %}</button></form></div>
+</article>

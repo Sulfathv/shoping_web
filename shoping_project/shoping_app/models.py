@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class Category(models.Model):
@@ -22,6 +23,9 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=9, decimal_places=2)
     original_price = models.DecimalField(max_digits=9, decimal_places=2, blank=True, null=True)
     sale_price = models.DecimalField(max_digits=9, decimal_places=2, blank=True, null=True)
+    offer_name = models.CharField(max_length=100, blank=True)
+    offer_starts_at = models.DateField(blank=True, null=True)
+    offer_ends_at = models.DateField(blank=True, null=True)
     image_url = models.URLField(blank=True)
     image = models.ImageField(upload_to='products/', blank=True)
     is_featured = models.BooleanField(default=False)
@@ -52,9 +56,33 @@ class Product(models.Model):
 
     @property
     def offer_percent(self):
+        if self.has_active_offer:
+            return round((self.price - self.sale_price) * 100 / self.price)
         if self.original_price and self.original_price > self.price:
             return round((self.original_price - self.price) * 100 / self.original_price)
         return 0
+
+    @property
+    def display_price(self):
+        return self.sale_price if self.has_active_offer else self.price
+
+    @property
+    def offer_reference_price(self):
+        return self.price if self.has_active_offer else self.original_price
+
+    @property
+    def configured_offer_percent(self):
+        if self.sale_price and self.price > self.sale_price:
+            return round((self.price - self.sale_price) * 100 / self.price)
+        return 0
+
+    @property
+    def has_active_offer(self):
+        if not self.sale_price or self.price <= self.sale_price:
+            return False
+        today = timezone.localdate()
+        return ((self.offer_starts_at is None or self.offer_starts_at <= today)
+                and (self.offer_ends_at is None or self.offer_ends_at >= today))
 
 
 class ProductImage(models.Model):
@@ -124,3 +152,4 @@ class BusinessExpense(models.Model):
 
     def __str__(self):
         return f'{self.name} · {self.amount}'
+

@@ -1,0 +1,5 @@
+shoping_venv/
+**/__pycache__/
+*.py[cod]
+shoping_project/db.sqlite3
+shoping_project/media/

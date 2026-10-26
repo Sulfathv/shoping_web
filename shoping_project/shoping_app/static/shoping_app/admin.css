@@ -2,3 +2,4 @@
 
 /* Moan admin wordmark */
 .brand{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;letter-spacing:2.2px}.brand-mark{font-size:24px;font-weight:700}
+.bulk-offer{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:13px 18px;border-bottom:1px solid var(--line);background:#faf8fb}.bulk-offer>strong{font-size:11px;color:var(--plum);margin-right:4px}.bulk-offer input{max-width:150px}.bulk-offer label{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:10px}.bulk-offer label input{max-width:145px}.bulk-offer .button{padding:9px 11px}@media(max-width:760px){.bulk-offer>*{flex:1;min-width:110px}.bulk-offer>strong{flex-basis:100%}}

@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 from datetime import timedelta
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
@@ -58,6 +59,34 @@ def admin_dashboard(request):
 
 @staff_member_required
 def admin_products(request):
+    if request.method == 'POST':
+        action = request.POST.get('offer_action')
+        if action in {'selected', 'all', 'clear'}:
+            products = Product.objects.all() if action == 'all' else Product.objects.filter(pk__in=request.POST.getlist('product_ids'))
+            if not products.exists():
+                messages.error(request, 'Select at least one product first.')
+                return redirect('admin_products')
+            if action == 'clear':
+                products.update(sale_price=None, offer_name='', offer_starts_at=None, offer_ends_at=None)
+                messages.success(request, 'Offers cleared from the selected products.')
+                return redirect('admin_products')
+            try:
+                percent = int(request.POST.get('offer_percent', ''))
+                name = request.POST.get('offer_name', '').strip()
+                starts_at = date.fromisoformat(request.POST.get('offer_starts_at', ''))
+                ends_at = date.fromisoformat(request.POST.get('offer_ends_at', ''))
+                if not 1 <= percent <= 99 or not name or ends_at < starts_at:
+                    raise ValueError
+            except (TypeError, ValueError):
+                messages.error(request, 'Enter an offer name, a percentage from 1 to 99, and a valid start and end date.')
+                return redirect('admin_products')
+            with transaction.atomic():
+                for product in products:
+                    product.sale_price = (product.price * Decimal(100 - percent) / Decimal(100)).quantize(Decimal('0.01'))
+                    product.offer_name, product.offer_starts_at, product.offer_ends_at = name, starts_at, ends_at
+                    product.save(update_fields=['sale_price', 'offer_name', 'offer_starts_at', 'offer_ends_at'])
+            messages.success(request, f'{name} ({percent}% off) applied to {products.count()} products.')
+            return redirect('admin_products')
     products = Product.objects.select_related('category').prefetch_related('gallery_images')
     q = request.GET.get('q', '').strip()
     status = request.GET.get('status', '')
@@ -81,7 +110,13 @@ def admin_product_form(request, product_id=None):
             category = Category.objects.get(pk=int(data.get('category', '')))
             price = Decimal(data.get('price', ''))
             cost = Decimal(data.get('original_price', ''))
-            sale_price = Decimal(data['sale_price']) if data.get('sale_price') else None
+            offer_percent = int(data.get('offer_percent') or 0)
+            if not 0 <= offer_percent <= 99: raise ValueError
+            sale_price = (price * Decimal(100 - offer_percent) / Decimal(100)).quantize(Decimal('0.01')) if offer_percent else None
+            offer_name = data.get('offer_name', '').strip() if offer_percent else ''
+            starts_at = date.fromisoformat(data.get('offer_starts_at', '')) if offer_percent else None
+            ends_at = date.fromisoformat(data.get('offer_ends_at', '')) if offer_percent else None
+            if offer_percent and (not offer_name or not starts_at or not ends_at or ends_at < starts_at): raise ValueError
             threshold = int(data.get('low_stock_threshold', 4))
             if not name or not desc or price <= 0 or cost < 0 or threshold < 0 or (sale_price is not None and (sale_price <= 0 or sale_price > price)):
                 raise ValueError
@@ -97,6 +132,7 @@ def admin_product_form(request, product_id=None):
         product.slug = slugify(name)[:45] or 'dress'
         if Product.objects.exclude(pk=product.pk).filter(slug=product.slug).exists(): product.slug = f'{product.slug}-{product.pk or "new"}'
         product.price, product.original_price, product.sale_price = price, cost, sale_price
+        product.offer_name, product.offer_starts_at, product.offer_ends_at = offer_name, starts_at, ends_at
         product.sizes, product.size_stock = sizes, stocks
         product.stock = sum(stocks.values())
         product.low_stock_threshold = threshold
@@ -332,7 +368,7 @@ def cart(request):
         quantity = int(cart_data.get(str(product.pk), 0))
         if quantity > product.stock:
             can_checkout = False
-        line_total = (product.sale_price or product.price) * quantity
+        line_total = product.display_price * quantity
         items.append({'product': product, 'quantity': quantity, 'line_total': line_total})
         total += line_total
     return render(request, 'shoping_app/cart.html', {'items': items, 'total': total, 'can_checkout': can_checkout, 'cart_count': sum(cart_data.values())})
@@ -345,7 +381,7 @@ def checkout(request):
     if not products:
         messages.info(request, 'Your bag is empty. Find something lovely in the collection.')
         return redirect('home')
-    total = sum(((product.sale_price or product.price) * int(cart_data.get(str(product.pk), 0)) for product in products), Decimal('0.00'))
+    total = sum((product.display_price * int(cart_data.get(str(product.pk), 0)) for product in products), Decimal('0.00'))
     if request.method == 'POST':
         if any(int(cart_data.get(str(product.pk), 0)) > product.stock for product in products):
             messages.error(request, 'Some items in your bag are no longer available in that quantity. Please review your bag.')
@@ -368,10 +404,11 @@ def checkout(request):
         )
         for product in products:
             quantity = int(cart_data.get(str(product.pk), 0))
-            OrderItem.objects.create(order=order, product=product, quantity=quantity, unit_price=product.sale_price or product.price, unit_cost=product.original_price or Decimal('0.00'))
+            OrderItem.objects.create(order=order, product=product, quantity=quantity, unit_price=product.display_price, unit_cost=product.original_price or Decimal('0.00'))
             product.stock -= quantity
             product.save(update_fields=['stock'])
         request.session['cart'] = {}
         return render(request, 'shoping_app/success.html', {'order': order})
-    checkout_items = [{'product': product, 'quantity': int(cart_data.get(str(product.pk), 0)), 'line_total': (product.sale_price or product.price) * int(cart_data.get(str(product.pk), 0))} for product in products]
+    checkout_items = [{'product': product, 'quantity': int(cart_data.get(str(product.pk), 0)), 'line_total': product.display_price * int(cart_data.get(str(product.pk), 0))} for product in products]
     return render(request, 'shoping_app/checkout.html', {'checkout_items': checkout_items, 'total': total, 'cart_count': sum(cart_data.values())})
+
